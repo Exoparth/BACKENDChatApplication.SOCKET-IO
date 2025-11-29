@@ -48,7 +48,7 @@ exports.getConversation = async (req, res) => {
 
         res.json({ success: true, msgs });
     } catch (err) {
-        console.log("getConversation error:", err);
+        console.log("getConversation error: ", err);
         res.status(500).json({ error: "Could not get messages" });
     }
 };
