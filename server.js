@@ -3,14 +3,15 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 const http = require("http");
 const { Server } = require("socket.io");
+const User = require("./models/User");
 
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "*"
-    }
+        origin: "*",
+    },
 });
 
 connectDB();
@@ -25,27 +26,33 @@ app.use("/api/users", require("./routes/userRoutes"));
 
 let onlineUsers = {};
 
-// SOCKET.IO CONNECTION ↓↓↓
+// SOCKET.IO
 io.on("connection", (socket) => {
     console.log("User Connected:", socket.id);
 
-    // join room = userId
     socket.on("joinRoom", (userId) => {
         socket.join(userId);
     });
 
-    // private messaging
-    socket.on("sendPrivateMessage", (data) => {
-        // Send to receiver
-        io.to(data.receiverId).emit("privateMessage", data);
-
-        // Send back to sender also
-        io.to(data.senderId).emit("privateMessage", data);
+    // private message (relays msg object from sender)
+    socket.on("sendPrivateMessage", (msg) => {
+        io.to(msg.receiverId).emit("privateMessage", msg);
+        io.to(msg.senderId).emit("privateMessage", msg); // sender also sees it
     });
 
+    // online presence
     socket.on("userOnline", (userId) => {
-        onlineUsers[userId] = socket.id;   // ✅ store socket.id
+        onlineUsers[userId] = socket.id;
         io.emit("onlineUsers", onlineUsers);
+    });
+
+    // typing
+    socket.on("typing", ({ senderId, receiverId }) => {
+        io.to(receiverId).emit("typing", { senderId });
+    });
+
+    socket.on("stopTyping", ({ senderId, receiverId }) => {
+        io.to(receiverId).emit("stopTyping", { senderId });
     });
 
     socket.on("disconnect", async () => {
@@ -60,7 +67,6 @@ io.on("connection", (socket) => {
         }
 
         if (disconnectedUserId) {
-            const User = require("./models/User");
             await User.findByIdAndUpdate(disconnectedUserId, {
                 lastSeen: Date.now(),
             });
@@ -68,18 +74,6 @@ io.on("connection", (socket) => {
 
         io.emit("onlineUsers", onlineUsers);
     });
-
-    // Typing started
-    socket.on("typing", ({ senderId, receiverId }) => {
-        io.to(receiverId).emit("typing", { senderId });
-    });
-
-    // Typing stopped
-    socket.on("stopTyping", ({ senderId, receiverId }) => {
-        io.to(receiverId).emit("stopTyping", { senderId });
-    });
-
 });
-
 
 server.listen(5000, () => console.log("Server running on 5000"));
