@@ -1,3 +1,4 @@
+require('dotenv').config(); // Add this at the top
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
@@ -23,6 +24,11 @@ app.use(express.json());
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
+
+// Health check route (important for Render)
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "OK", message: "Server is running" });
+});
 
 let onlineUsers = {};
 
@@ -67,13 +73,19 @@ io.on("connection", (socket) => {
         }
 
         if (disconnectedUserId) {
-            await User.findByIdAndUpdate(disconnectedUserId, {
-                lastSeen: Date.now(),
-            });
+            try {
+                await User.findByIdAndUpdate(disconnectedUserId, {
+                    lastSeen: Date.now(),
+                });
+            } catch (error) {
+                console.error("Error updating last seen:", error);
+            }
         }
 
         io.emit("onlineUsers", onlineUsers);
     });
 });
 
-server.listen(5000, () => console.log("Server running on 5000"));
+const PORT = process.env.PORT || 5000; // Use environment variable
+
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
